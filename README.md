@@ -2,6 +2,8 @@
 
 Rotina gamificada para crianças. Roda no navegador, guarda tudo **no próprio aparelho** (nada vai pra internet), funciona offline e instala como app no tablet.
 
+**No ar em:** https://paulofinn.github.io/herois-da-rotina/
+
 ## Testar no PC
 
 Na pasta do projeto:
