@@ -1,0 +1,16 @@
+{
+  "name": "Heróis da Rotina",
+  "short_name": "Heróis",
+  "description": "Rotina gamificada para crianças: tarefas, moedas, níveis e prêmios.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#f5f6fb",
+  "theme_color": "#6C5CE7",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icone.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
