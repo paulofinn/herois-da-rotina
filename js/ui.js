@@ -153,6 +153,14 @@ function formulario({ titulo, sub, campos, textoSalvar, aoSalvar, extra }) {
         c.opcoes.map(e => '<button type="button" data-e="' + e + '" class="' + (e === c.valor ? 'on' : '') + '">' + e + '</button>').join('') +
         '</div></label>';
     }
+    if (c.tipo === 'dias') {
+      const sel = c.valor || [];
+      const nomes = { 1: 'seg', 2: 'ter', 3: 'qua', 4: 'qui', 5: 'sex', 6: 'sáb', 0: 'dom' };
+      return '<label class="campo">' + esc(c.rotulo) +
+        '<div class="chip-lista" id="' + id + '" style="margin-top:8px">' +
+        [1, 2, 3, 4, 5, 6, 0].map(d => '<button type="button" class="chip ' + (sel.includes(d) ? 'on' : '') + '" data-d="' + d + '">' + nomes[d] + '</button>').join('') +
+        '</div><small style="font-weight:500;color:var(--muted)">' + esc(c.dica || 'Nenhum marcado = todos os dias') + '</small></label>';
+    }
     if (c.tipo === 'kids') {
       const sel = c.valor || [];
       return '<label class="campo">' + esc(c.rotulo) +
@@ -176,6 +184,7 @@ function formulario({ titulo, sub, campos, textoSalvar, aoSalvar, extra }) {
             if (c.tipo === 'check') dados[c.nome] = el.checked;
             else if (c.tipo === 'emoji') dados[c.nome] = el.dataset.valor;
             else if (c.tipo === 'kids') dados[c.nome] = $$('.chip.on', el).map(b => b.dataset.k);
+            else if (c.tipo === 'dias') dados[c.nome] = $$('.chip.on', el).map(b => Number(b.dataset.d));
             else if (c.tipo === 'numero') dados[c.nome] = Number(el.value) || 0;
             else dados[c.nome] = el.value.trim();
           });

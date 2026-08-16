@@ -73,6 +73,59 @@ function telaBoasVindas() {
   };
 }
 
+/* ---------------- avisos de tarefas atrasadas ----------------
+   Sem servidor, o app só consegue avisar enquanto estiver aberto neste
+   aparelho (mesmo em segundo plano, se o navegador permitir). */
+function verificaAvisos() {
+  const a = S.cfg.avisos;
+  if (!a || !a.ativo) return;
+  const agora = new Date();
+  const minutosAgora = agora.getHours() * 60 + agora.getMinutes();
+  const data = hojeISO();
+  if (!S.avisados) S.avisados = {};
+
+  [['manha', 'da manhã 🌅'], ['tarde', 'da tarde ☀️'], ['noite', 'da noite 🌙']].forEach(par => {
+    const periodo = par[0], nome = par[1], alvo = a[periodo];
+    if (!alvo) return;
+    const m = alvo.split(':');
+    const minutosAlvo = Number(m[0]) * 60 + Number(m[1]);
+    if (minutosAgora < minutosAlvo) return;
+    const chave = data + ':' + periodo;
+    if (S.avisados[chave]) return;
+
+    // limpa marcações de dias anteriores e registra esta (mesmo sem pendência, pra não repetir)
+    Object.keys(S.avisados).forEach(c => { if (c.indexOf(data) !== 0) delete S.avisados[c]; });
+    S.avisados[chave] = true;
+    salvar();
+
+    // se o app só foi aberto muito depois do horário, cobrar já não ajuda
+    if (minutosAgora - minutosAlvo > 180) return;
+
+    const linhas = [];
+    S.kids.forEach(k => {
+      const faltam = tarefasDoDia(k.id, data).filter(t =>
+        t.tipo === 'diaria' && (t.periodo || 'qualquer') === periodo && !feitoDe(k.id, t.id, data));
+      if (faltam.length) linhas.push(k.icone + ' ' + k.nome + ': ' + faltam.map(t => t.icone + ' ' + t.titulo).join(', '));
+    });
+    if (!linhas.length) return;
+    notificar('Tarefas ' + nome + ' esperando!', linhas.join('\n'));
+  });
+}
+
+function notificar(titulo, corpo) {
+  toast('🔔 ' + titulo);
+  try {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    const opts = { body: corpo, icon: 'icone.svg', badge: 'icone.svg', tag: 'herois-aviso' };
+    if (navigator.serviceWorker) {
+      navigator.serviceWorker.getRegistration().then(reg => {
+        if (reg && reg.showNotification) reg.showNotification(titulo, opts);
+        else new Notification(titulo, opts);
+      }).catch(() => { try { new Notification(titulo, opts); } catch (e) {} });
+    } else new Notification(titulo, opts);
+  } catch (e) { /* aviso na tela já foi dado */ }
+}
+
 /* ---------------- boot ---------------- */
 function iniciar() {
   carregar();
@@ -89,6 +142,9 @@ function iniciar() {
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
+
+  setInterval(verificaAvisos, 60000);
+  setTimeout(verificaAvisos, 3000);   // também confere logo ao abrir o app
 }
 
 document.addEventListener('DOMContentLoaded', iniciar);

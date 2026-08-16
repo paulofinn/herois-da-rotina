@@ -47,12 +47,15 @@ function estadoInicial() {
     pronto: false,
     pin: '1234',
     cfg: {
-      chanceBau: 0.35,          // reforço variável: chance de baú ao fechar o dia
       bonusDiaPerfeito: 5,
       xpDiaPerfeito: 10,
       somLigado: true,
-      cofrinho: { ativo: true, planos: [{ dias: 3, pct: 10 }, { dias: 7, pct: 25 }] }
+      cofrinho: { ativo: true, planos: [{ dias: 3, pct: 10 }, { dias: 7, pct: 25 }] },
+      // reforço de razão variável: a incerteza do baú é o que mais sustenta o hábito
+      bau: { quando: 'dia', chance: 0.35, itens: { moedas: true, xp: true, premio: false, escudo: true } },
+      avisos: { ativo: false, manha: '12:00', tarde: '18:00', noite: '20:30' }
     },
+    avisados: {},
     meta: { titulo: 'Noite de pizza e cinema em casa', alvo: 60, ativa: true, ultimaSemanaGanha: '' },
     kids: [],
     tarefas: [],
@@ -67,7 +70,7 @@ function novoKid(nome, icone, cor, simples) {
   return {
     id: uid(), nome, icone, cor, simples: !!simples,
     moedas: 0, xp: 0, totalMoedas: 0,
-    cofrinho: null, cofrinhosCompletos: 0,
+    cofrinho: null, cofrinhosCompletos: 0, bauPendente: null,
     streak: { n: 0, melhor: 0, ultimoDia: '', escudos: 1, semanaEscudo: semanaAtual() },
     desafio: { semana: '', tarefaId: '' },
     conquistas: [], nivelVisto: 1, ultimaFesta: null
@@ -90,6 +93,9 @@ function carregar() {
   const padrao = estadoInicial();
   for (const k in padrao) if (!(k in S)) S[k] = padrao[k];
   S.cfg = Object.assign({}, padrao.cfg, S.cfg);
+  if (!S.cfg.bau) S.cfg.bau = padrao.cfg.bau;
+  if (!S.cfg.avisos) S.cfg.avisos = padrao.cfg.avisos;
+  if (S.cfg.chanceBau != null) { S.cfg.bau.chance = S.cfg.chanceBau; delete S.cfg.chanceBau; }   // formato antigo
   S.kids.forEach(k => {
     if (!k.streak) k.streak = { n: 0, melhor: 0, ultimoDia: '', escudos: 1, semanaEscudo: semanaAtual() };
     if (!k.desafio) k.desafio = { semana: '', tarefaId: '' };
@@ -98,6 +104,7 @@ function carregar() {
     if (k.ultimaFesta === undefined) k.ultimaFesta = null;
     if (k.cofrinho === undefined) k.cofrinho = null;
     if (!k.cofrinhosCompletos) k.cofrinhosCompletos = 0;
+    if (k.bauPendente === undefined) k.bauPendente = null;
     recarregarEscudo(k);
   });
   return S;
@@ -228,6 +235,7 @@ function concluirTarefa(kidId, tarefaId) {
     creditar(kid, v.moedas, v.xp, t.icone + ' ' + t.titulo);
     r.subiuNivel = nivelPorXp(kid.xp) > r.nivelAntes;
     r.extras = fecharDiaSePerfeito(kid);
+    talvezBau(kid, 'tarefa', t);
   }
   novasConquistas(kid);
   salvar();
@@ -258,6 +266,7 @@ function aprovarFeito(feitoId, aprovado) {
   f.status = 'aprovada';
   creditar(kid, f.moedas, f.xp, (t ? t.icone + ' ' + t.titulo : 'Tarefa') + ' (aprovada)');
   fecharDiaSePerfeito(kid);
+  if (t) talvezBau(kid, 'tarefa', t);
   novasConquistas(kid);
   salvar();
 }
@@ -306,14 +315,62 @@ function fecharDiaSePerfeito(kid) {
   const moedas = S.cfg.bonusDiaPerfeito + bonusStreak;
   creditar(kid, moedas, S.cfg.xpDiaPerfeito, '⭐ Dia perfeito (ofensiva ' + kid.streak.n + ')');
 
-  let bau = 0;
-  if (Math.random() < S.cfg.chanceBau) {           // reforço de razão variável: o que sustenta o hábito
-    bau = 3 + Math.floor(Math.random() * 8);
-    creditar(kid, bau, 0, '🎁 Baú surpresa');
-  }
+  talvezBau(kid, 'dia');
   // guardado para a criança ver a comemoração mesmo quando quem fechou o dia foi a aprovação dos pais
-  kid.ultimaFesta = { data, moedas, xp: S.cfg.xpDiaPerfeito, streak: kid.streak.n, escudoUsado, bau, vista: false };
+  kid.ultimaFesta = { data, moedas, xp: S.cfg.xpDiaPerfeito, streak: kid.streak.n, escudoUsado, vista: false };
   return kid.ultimaFesta;
+}
+
+/* ---------- baú surpresa ----------
+   O prêmio é sorteado na hora e fica "fechado" (kid.bauPendente) até a
+   criança tocar em "Abrir" — só aí é creditado. */
+function premiosDeBau(kid) {
+  return recompensasDoKid(kid.id).filter(r => r.custo <= 30 && nivelPorXp(kid.xp) >= r.nivelMin);
+}
+
+function sorteioBau(kid) {
+  const itens = S.cfg.bau.itens || {};
+  const tipos = [];
+  if (itens.moedas !== false) tipos.push('moedas', 'moedas');    // moedas com peso maior
+  if (itens.xp) tipos.push('xp');
+  if (itens.escudo && kid.streak.escudos < 2) tipos.push('escudo');
+  if (itens.premio && premiosDeBau(kid).length) tipos.push('premio');
+  if (!tipos.length) tipos.push('moedas');
+  const tipo = tipos[Math.floor(Math.random() * tipos.length)];
+  if (tipo === 'moedas') return { tipo, moedas: 3 + Math.floor(Math.random() * 10) };
+  if (tipo === 'xp') return { tipo, xp: 10 + Math.floor(Math.random() * 16) };
+  if (tipo === 'escudo') return { tipo };
+  const opcoes = premiosDeBau(kid);
+  const r = opcoes[Math.floor(Math.random() * opcoes.length)];
+  return { tipo: 'premio', recompensaId: r.id, titulo: r.titulo, icone: r.icone };
+}
+
+function talvezBau(kid, gatilho, tarefa) {
+  const cfg = S.cfg.bau;
+  if (!cfg || kid.bauPendente) return;
+  if (cfg.quando === 'dia' && gatilho !== 'dia') return;
+  if (cfg.quando !== 'dia' && gatilho === 'dia') return;
+  if (cfg.quando === 'selecionadas' && (!tarefa || !tarefa.bau)) return;
+  if (Math.random() >= cfg.chance) return;
+  kid.bauPendente = sorteioBau(kid);
+}
+
+function abrirBau(kidId) {
+  const kid = kidPorId(kidId), b = kid && kid.bauPendente;
+  if (!b) return null;
+  if (b.tipo === 'moedas') creditar(kid, b.moedas, 0, '🎁 Baú surpresa');
+  else if (b.tipo === 'xp') creditar(kid, 0, b.xp, '🎁 Baú surpresa');
+  else if (b.tipo === 'escudo') {
+    kid.streak.escudos += 1;
+    S.extrato.push({ id: uid(), kidId: kid.id, ts: Date.now(), moedas: 0, xp: 0, texto: '🎁 Baú: escudo extra 🛡️' });
+  } else if (b.tipo === 'premio') {
+    S.resgates.push({ id: uid(), kidId: kid.id, recompensaId: b.recompensaId, ts: Date.now(), custo: 0, status: 'pendente', titulo: b.titulo, icone: b.icone });
+    S.extrato.push({ id: uid(), kidId: kid.id, ts: Date.now(), moedas: 0, xp: 0, texto: '🎁 Baú: ' + b.titulo });
+  }
+  kid.bauPendente = null;
+  novasConquistas(kid);
+  salvar();
+  return b;
 }
 
 /* ---------- loja ---------- */

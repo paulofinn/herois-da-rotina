@@ -161,7 +161,8 @@ function painelTarefas() {
       (lista.length ? lista.map(t =>
         '<div class="linha-item" style="' + (t.ativa ? '' : 'opacity:.5') + '"><div class="ic">' + t.icone + '</div><div class="corpo">' +
         '<b>' + esc(t.titulo) + '</b><small>🪙 ' + t.moedas + ' · ⭐ ' + t.xp + ' XP · ' + NOMES_PERIODO[t.periodo || 'qualquer'] +
-        (t.aprovacao ? ' · precisa de aprovação' : '') + (t.consolidada ? ' · hábito (vale metade)' : '') +
+        (t.dias && t.dias.length ? ' · ' + [1, 2, 3, 4, 5, 6, 0].filter(d => t.dias.includes(d)).map(d => ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][d]).join('/') : '') +
+        (t.aprovacao ? ' · precisa de aprovação' : '') + (t.bau ? ' · 🎁' : '') + (t.consolidada ? ' · hábito (vale metade)' : '') +
         ' · ' + (t.kids && t.kids.length ? t.kids.map(id => { const k = kidPorId(id); return k ? k.icone : ''; }).join(' ') : 'todos') + '</small></div>' +
         '<div class="acoes">' +
         '<button class="btn pequeno claro" data-habito="' + t.id + '" title="Já virou hábito: passa a valer metade">' + (t.consolidada ? '↩️' : '🌱') + '</button>' +
@@ -201,12 +202,18 @@ function formTarefa(t, tipo) {
       { nome: 'moedas', rotulo: 'Moedas', tipo: 'numero', valor: t ? t.moedas : 3 },
       { nome: 'xp', rotulo: 'XP', tipo: 'numero', valor: t ? t.xp : 6 },
       { nome: 'periodo', rotulo: 'Quando aparece', tipo: 'select', valor: t ? (t.periodo || 'qualquer') : 'qualquer',
-        opcoes: Object.keys(NOMES_PERIODO).map(k => ({ v: k, t: NOMES_PERIODO[k] })) },
+        opcoes: Object.keys(NOMES_PERIODO).map(k => ({ v: k, t: NOMES_PERIODO[k] })) }
+    ].concat(tipo === 'diaria' ? [
+      { nome: 'dias', rotulo: 'Em quais dias da semana?', tipo: 'dias', valor: t ? (t.dias || []) : [],
+        dica: 'Nenhum marcado = todos os dias. Ex.: mochila da escola só de dom a qui.' }
+    ] : []).concat([
       { nome: 'aprovacao', rotulo: 'Precisa da aprovação dos pais', tipo: 'check', valor: t ? t.aprovacao : false,
         dica: 'Use só nas de maior valor — o resto perde a graça se demorar' },
+      { nome: 'bau', rotulo: 'Pode soltar baú surpresa 🎁', tipo: 'check', valor: t ? !!t.bau : false,
+        dica: 'Só tem efeito se o baú estiver no modo "tarefas marcadas" (Ajustes). Bom pra hábitos difíceis.' },
       { nome: 'kids', rotulo: 'Para quem', tipo: 'kids', valor: t ? t.kids : [] },
       { nome: 'ativa', rotulo: 'Ativa', tipo: 'check', valor: t ? t.ativa : true }
-    ],
+    ]),
     aoSalvar: d => {
       if (!d.titulo) { toast('Escreva o que é a tarefa', 'erro'); return false; }
       if (t) Object.assign(t, d);
@@ -264,6 +271,23 @@ function formPremio(r) {
 }
 
 /* ---------------- ajustes ---------------- */
+const NOMES_BAU_QUANDO = { dia: 'ao fechar dia perfeito', tarefa: 'em qualquer tarefa', selecionadas: 'só em tarefas marcadas' };
+
+function resumoItensBau() {
+  const i = S.cfg.bau.itens || {};
+  const lista = [];
+  if (i.moedas !== false) lista.push('🪙');
+  if (i.xp) lista.push('⭐');
+  if (i.escudo) lista.push('🛡️');
+  if (i.premio) lista.push('🎁');
+  return lista.join(' ') || '🪙';
+}
+
+function statusNotif() {
+  if (!('Notification' in window)) return 'sem suporte';
+  return { granted: 'permitidas ✅', denied: 'bloqueadas ❌', default: 'toque no 🔔 pra permitir' }[Notification.permission];
+}
+
 function painelAjustes() {
   const m = progressoMeta();
   return '<div class="painel"><h3 style="font-size:17px">👨‍👩‍👧‍👦 Missão da família</h3>' +
@@ -274,10 +298,19 @@ function painelAjustes() {
 
     '<div class="painel"><h3 style="font-size:17px">⚙️ Regras do jogo</h3>' +
     '<div class="linha-item"><div class="ic">🎁</div><div class="corpo"><b>Baú surpresa</b>' +
-    '<small>' + Math.round(S.cfg.chanceBau * 100) + '% de chance ao fechar o dia. A surpresa é o que mais sustenta o hábito — não deixe em 100%.</small></div>' +
-    '<div class="acoes"><button class="btn pequeno claro" data-regras="1">Editar</button></div></div>' +
+    '<small>' + Math.round(S.cfg.bau.chance * 100) + '% de chance · ' + NOMES_BAU_QUANDO[S.cfg.bau.quando] +
+    ' · pode vir: ' + resumoItensBau() + '</small></div>' +
+    '<div class="acoes"><button class="btn pequeno claro" data-bau="1">Editar</button></div></div>' +
+    '<div class="linha-item"><div class="ic">🔔</div><div class="corpo"><b>Avisos de tarefas atrasadas</b>' +
+    '<small>' + (S.cfg.avisos.ativo
+      ? [['manhã', S.cfg.avisos.manha], ['tarde', S.cfg.avisos.tarde], ['noite', S.cfg.avisos.noite]]
+          .filter(p => p[1]).map(p => p[0] + ' às ' + p[1]).join(' · ') + ' · notificações: ' + statusNotif()
+      : 'desligados') + '</small></div>' +
+    '<div class="acoes"><button class="btn pequeno claro" data-notif="1">🔔</button>' +
+    '<button class="btn pequeno claro" data-avisos="1">Editar</button></div></div>' +
     '<div class="linha-item"><div class="ic">⭐</div><div class="corpo"><b>Bônus de dia perfeito</b>' +
-    '<small>🪙 ' + S.cfg.bonusDiaPerfeito + ' + ofensiva · ⭐ ' + S.cfg.xpDiaPerfeito + ' XP</small></div></div>' +
+    '<small>🪙 ' + S.cfg.bonusDiaPerfeito + ' + ofensiva · ⭐ ' + S.cfg.xpDiaPerfeito + ' XP</small></div>' +
+    '<div class="acoes"><button class="btn pequeno claro" data-regras="1">Editar</button></div></div>' +
     '<div class="linha-item"><div class="ic">🐷</div><div class="corpo"><b>Cofrinho (investimento)</b>' +
     '<small>' + (S.cfg.cofrinho.ativo
       ? (S.cfg.cofrinho.planos || []).map(p => p.dias + ' dias: +' + p.pct + '%').join(' · ') + ' · quebrar antes devolve só o guardado'
@@ -317,19 +350,75 @@ function eventosAjustes() {
   });
 
   $('[data-regras]').onclick = () => formulario({
-    titulo: 'Regras do jogo',
+    titulo: '⭐ Bônus de dia perfeito',
     campos: [
-      { nome: 'chance', rotulo: 'Chance de baú surpresa (%)', tipo: 'numero', valor: Math.round(S.cfg.chanceBau * 100) },
       { nome: 'bonusDiaPerfeito', rotulo: 'Moedas de bônus por dia perfeito', tipo: 'numero', valor: S.cfg.bonusDiaPerfeito },
       { nome: 'xpDiaPerfeito', rotulo: 'XP de bônus por dia perfeito', tipo: 'numero', valor: S.cfg.xpDiaPerfeito }
     ],
     aoSalvar: d => {
-      S.cfg.chanceBau = Math.min(1, Math.max(0, d.chance / 100));
       S.cfg.bonusDiaPerfeito = d.bonusDiaPerfeito;
       S.cfg.xpDiaPerfeito = d.xpDiaPerfeito;
       salvar(); telaAdmin();
     }
   });
+
+  $('[data-bau]').onclick = () => {
+    const b = S.cfg.bau;
+    formulario({
+      titulo: '🎁 Baú surpresa',
+      sub: 'O conteúdo é sorteado entre o que você marcar. A graça é a incerteza — não deixe a chance em 100%.',
+      campos: [
+        { nome: 'chance', rotulo: 'Chance de aparecer (%)', tipo: 'numero', valor: Math.round(b.chance * 100) },
+        { nome: 'quando', rotulo: 'Quando pode aparecer', tipo: 'select', valor: b.quando, opcoes: [
+          { v: 'dia', t: 'Só ao fechar um dia perfeito' },
+          { v: 'tarefa', t: 'Em qualquer tarefa concluída' },
+          { v: 'selecionadas', t: 'Só em tarefas marcadas ("pode soltar baú")' }
+        ] },
+        { nome: 'moedas', rotulo: 'Pode vir: 🪙 moedas (3 a 12)', tipo: 'check', valor: b.itens.moedas !== false },
+        { nome: 'xp', rotulo: 'Pode vir: ⭐ XP (10 a 25)', tipo: 'check', valor: !!b.itens.xp },
+        { nome: 'escudo', rotulo: 'Pode vir: 🛡️ escudo extra da ofensiva', tipo: 'check', valor: !!b.itens.escudo },
+        { nome: 'premio', rotulo: 'Pode vir: 🎁 prêmio da loja de graça', tipo: 'check', valor: !!b.itens.premio,
+          dica: 'Sorteia um prêmio de até 30 moedas já desbloqueado pro nível da criança' }
+      ],
+      aoSalvar: d => {
+        S.cfg.bau = {
+          quando: d.quando,
+          chance: Math.min(1, Math.max(0, d.chance / 100)),
+          itens: { moedas: d.moedas, xp: d.xp, escudo: d.escudo, premio: d.premio }
+        };
+        salvar(); telaAdmin();
+      }
+    });
+  };
+
+  $('[data-avisos]').onclick = () => {
+    const a = S.cfg.avisos;
+    formulario({
+      titulo: '🔔 Avisos de tarefas atrasadas',
+      sub: 'No horário definido, o app mostra as tarefas do turno que ficaram pra trás. Precisa do app aberto neste aparelho (é um app sem servidor — os dados não saem daqui).',
+      campos: [
+        { nome: 'ativo', rotulo: 'Ativar avisos', tipo: 'check', valor: a.ativo },
+        { nome: 'manha', rotulo: 'Cobrar as da manhã às (vazio = não cobrar)', tipo: 'texto', valor: a.manha },
+        { nome: 'tarde', rotulo: 'Cobrar as da tarde às', tipo: 'texto', valor: a.tarde },
+        { nome: 'noite', rotulo: 'Cobrar as da noite às', tipo: 'texto', valor: a.noite }
+      ],
+      aoSalvar: d => {
+        const ok = v => v === '' || /^([01]?\d|2[0-3]):[0-5]\d$/.test(v);
+        if (!ok(d.manha) || !ok(d.tarde) || !ok(d.noite)) { toast('Use o formato HH:MM, ex.: 12:00', 'erro'); return false; }
+        S.cfg.avisos = { ativo: d.ativo, manha: d.manha, tarde: d.tarde, noite: d.noite };
+        salvar(); telaAdmin();
+      }
+    });
+  };
+
+  $('[data-notif]').onclick = () => {
+    if (!('Notification' in window)) return toast('Este aparelho não suporta notificações', 'erro');
+    if (Notification.permission === 'granted') return toast('Notificações já estão permitidas ✅');
+    Notification.requestPermission().then(p => {
+      toast(p === 'granted' ? 'Notificações permitidas!' : 'O navegador bloqueou — veja as permissões do site', p === 'granted' ? undefined : 'erro');
+      telaAdmin();
+    });
+  };
 
   $('[data-cofrinho]').onclick = () => {
     const p1 = (S.cfg.cofrinho.planos || [])[0] || { dias: 3, pct: 10 };

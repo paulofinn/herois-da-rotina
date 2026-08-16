@@ -97,8 +97,40 @@ function festasPendentes(kid) {
   const nivel = nivelPorXp(kid.xp);
   if (nivel > (kid.nivelVisto || 1)) {
     kid.nivelVisto = nivel; salvar();
-    setTimeout(() => festaDeNivel(kid), 350);
+    return setTimeout(() => festaDeNivel(kid), 350);
   }
+  if (kid.bauPendente) setTimeout(() => modalBau(kid), 350);
+}
+
+/* O baú aparece fechado, balançando — o prêmio só é sorteado/creditado ao abrir */
+function modalBau(kid) {
+  som('compra');
+  modal({
+    classe: 'brinde',
+    fechavel: false,
+    corpo: '<div class="brinde"><div class="grande bau-fechado">🎁</div>' +
+      '<h3 style="margin-top:10px">Um baú surpresa!</h3>' +
+      '<p class="sub">Você mereceu. O que será que tem dentro?</p></div>',
+    botoes: [{ texto: 'Abrir! 🔓', classe: 'ok', acao: () => {
+        const b = abrirBau(kid.id);
+        fecharModal();
+        if (!b) return telaKid();
+        confete(100); som('nivel');
+        const desc =
+          b.tipo === 'moedas' ? '🪙<br>+' + b.moedas + ' moedas!' :
+          b.tipo === 'xp' ? '⭐<br>+' + b.xp + ' XP!' :
+          b.tipo === 'escudo' ? '🛡️<br>Escudo extra pra ofensiva!' :
+          b.icone + '<br>' + esc(b.titulo) + '<br><small style="font-weight:600">de graça, sem gastar moedas!</small>';
+        modal({
+          classe: 'brinde',
+          corpo: '<div class="brinde"><div class="grande" style="font-size:56px">🎉</div>' +
+            '<h3 style="margin-top:10px;line-height:1.5">' + desc + '</h3>' +
+            (b.tipo === 'premio' ? '<p class="sub">Já foi pra sua fila de prêmios. Avise os pais!</p>' : '') +
+            '</div>',
+          botoes: [{ texto: 'Uhuul!', acao: () => { fecharModal(); telaKid(); } }]
+        });
+      } }]
+  });
 }
 
 /* ---------------- aba HOJE ---------------- */
@@ -244,7 +276,6 @@ function festaDeFimDeDia(kid, extras) {
         '<div>⭐ <b>+' + extras.xp + '</b> XP</div>' +
         '<div>🔥 Ofensiva de <b>' + extras.streak + ' dia' + (extras.streak > 1 ? 's' : '') + '</b></div>' +
         (extras.escudoUsado ? '<div>🛡️ Seu escudo salvou a ofensiva!</div>' : '') +
-        (extras.bau ? '<div style="margin-top:8px;color:#b57a00"><b>🎁 Baú surpresa: +' + extras.bau + ' moedas!</b></div>' : '') +
       '</div></div>',
     botoes: [{ texto: 'Boa!', acao: () => { fecharModal(); telaKid(); } }]
   });

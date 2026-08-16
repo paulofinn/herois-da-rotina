@@ -258,6 +258,15 @@ label.campo input:focus, label.campo select:focus { border-color: var(--accent);
 .brinde { text-align: center; }
 .brinde .grande { font-size: 76px; animation: pula .6s; }
 @keyframes pula { 0%{transform:scale(.3);opacity:0} 60%{transform:scale(1.18)} 100%{transform:scale(1)} }
+.bau-fechado { animation: pula .6s, balanca 1.6s .6s infinite; display: inline-block; }
+@keyframes balanca {
+  0%, 100% { transform: rotate(0) }
+  15% { transform: rotate(-9deg) scale(1.04) }
+  30% { transform: rotate(8deg) }
+  45% { transform: rotate(-6deg) scale(1.02) }
+  60% { transform: rotate(5deg) }
+  75% { transform: rotate(0) }
+}
 @keyframes aparece { from { opacity: 0 } }
 @keyframes sobe { from { transform: translateY(24px); opacity: 0 } }
 
