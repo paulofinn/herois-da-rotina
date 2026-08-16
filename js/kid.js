@@ -287,7 +287,7 @@ function abaLoja(kid) {
     }).join('') + '</div></div>';
   });
 
-  if (!lista.length) html = '<div class="vazio">Nenhum prêmio cadastrado ainda.<br>Peça pros pais adicionarem 😉</div>';
+  if (!lista.length) html += '<div class="vazio">Nenhum prêmio cadastrado ainda.<br>Peça pros pais adicionarem 😉</div>';
   return html;
 }
 
