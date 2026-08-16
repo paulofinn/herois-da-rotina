@@ -57,6 +57,7 @@ function estadoInicial() {
     },
     avisados: {},
     meta: { titulo: 'Noite de pizza e cinema em casa', alvo: 60, ativa: true, ultimaSemanaGanha: '' },
+    missoes: {},       // por criança: { ativa, premio, icone, tipo, alvo, tarefaId, semanaGanha }
     kids: [],
     tarefas: [],
     recompensas: [],
@@ -458,6 +459,32 @@ function quebrarCofrinho(kidId) {
   kid.cofrinho = null;
   salvar();
   return e;
+}
+
+/* ---------- missão de fim de semana ----------
+   Meta semanal individual que desbloqueia um prêmio exclusivo (uma
+   experiência, fora da economia de moedas) no sábado e domingo. */
+function progressoMissao(kid) {
+  const m = S.missoes[kid.id];
+  if (!m || !m.ativa) return null;
+  const sem = semanaAtual(), hoje = hojeISO();
+  let atual = 0;
+  if (m.tipo === 'perfeitos') {
+    const d = dataDe(inicioDaSemana(hoje));
+    for (let i = 0; i < 7 && ymd(d) <= hoje; i++, d.setDate(d.getDate() + 1))
+      if (diaEstaPerfeito(kid.id, ymd(d))) atual++;
+  } else if (m.tipo === 'tarefa') {
+    atual = S.feitos.filter(f => f.kidId === kid.id && f.semana === sem && f.status === 'aprovada' && f.tarefaId === m.tarefaId).length;
+  } else {
+    atual = S.feitos.filter(f => f.kidId === kid.id && f.semana === sem && f.status === 'aprovada').length;
+  }
+  const dow = dataDe(hoje).getDay();
+  return {
+    m, atual, alvo: m.alvo,
+    pct: Math.min(100, (atual / Math.max(1, m.alvo)) * 100),
+    fimDeSemana: dow === 6 || dow === 0,
+    batida: atual >= m.alvo
+  };
 }
 
 /* ---------- meta cooperativa da família ---------- */

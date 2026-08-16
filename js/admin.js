@@ -104,6 +104,7 @@ function eventosKids() {
       S.feitos = S.feitos.filter(f => f.kidId !== k.id);
       S.extrato = S.extrato.filter(e => e.kidId !== k.id);
       S.resgates = S.resgates.filter(r => r.kidId !== k.id);
+      delete S.missoes[k.id];
       salvar(); telaAdmin();
     });
   });
@@ -283,6 +284,15 @@ function resumoItensBau() {
   return lista.join(' ') || '🪙';
 }
 
+function descMissao(m) {
+  if (m.tipo === 'perfeitos') return m.alvo + ' dias perfeitos na semana';
+  if (m.tipo === 'tarefa') {
+    const t = tarefaPorId(m.tarefaId);
+    return m.alvo + '× ' + (t ? t.icone + ' ' + t.titulo : 'tarefa removida');
+  }
+  return m.alvo + ' tarefas na semana';
+}
+
 function statusNotif() {
   if (!('Notification' in window)) return 'sem suporte';
   return { granted: 'permitidas ✅', denied: 'bloqueadas ❌', default: 'toque no 🔔 pra permitir' }[Notification.permission];
@@ -295,6 +305,16 @@ function painelAjustes() {
     '<div class="linha-item"><div class="ic">🍕</div><div class="corpo"><b>' + esc(S.meta.titulo) + '</b>' +
     '<small>' + m.total + ' de ' + m.alvo + ' tarefas nesta semana · ' + (S.meta.ativa ? 'ativa' : 'desligada') + '</small></div>' +
     '<div class="acoes"><button class="btn pequeno claro" data-meta="1">Editar</button></div></div></div>' +
+
+    '<div class="painel"><h3 style="font-size:17px">🏆 Missão de fim de semana</h3>' +
+    '<p style="color:var(--ink-2);font-size:13px;margin:6px 0">Meta individual da semana que desbloqueia um prêmio exclusivo no sábado e domingo — fora da economia de moedas. Prefira experiências com vocês, não coisas.</p>' +
+    S.kids.map(k => {
+      const m = S.missoes[k.id];
+      return '<div class="linha-item"><div class="ic">' + (m && m.ativa ? m.icone : '🏆') + '</div><div class="corpo">' +
+        '<b>' + k.icone + ' ' + esc(k.nome) + '</b><small>' +
+        (m && m.ativa ? esc(m.premio) + ' · ' + descMissao(m) : 'sem missão definida') + '</small></div>' +
+        '<div class="acoes"><button class="btn pequeno claro" data-missao="' + k.id + '">Editar</button></div></div>';
+    }).join('') + '</div>' +
 
     '<div class="painel"><h3 style="font-size:17px">⚙️ Regras do jogo</h3>' +
     '<div class="linha-item"><div class="ic">🎁</div><div class="corpo"><b>Baú surpresa</b>' +
@@ -360,6 +380,37 @@ function eventosAjustes() {
       S.cfg.xpDiaPerfeito = d.xpDiaPerfeito;
       salvar(); telaAdmin();
     }
+  });
+
+  $$('[data-missao]').forEach(b => b.onclick = () => {
+    const kid = kidPorId(b.dataset.missao);
+    const m = S.missoes[kid.id] || { ativa: false, premio: '', icone: '🏆', tipo: 'perfeitos', alvo: 4, tarefaId: '', semanaGanha: '' };
+    const tarefasKid = S.tarefas.filter(t => t.ativa && t.tipo !== 'pontual' && serveAoKid(t, kid.id));
+    formulario({
+      titulo: '🏆 Missão de ' + kid.nome,
+      sub: 'Se a meta for batida até o fim de semana, o prêmio desbloqueia no sábado. Segunda-feira o progresso zera e a missão recomeça sozinha.',
+      campos: [
+        { nome: 'ativa', rotulo: 'Missão ativa', tipo: 'check', valor: m.ativa },
+        { nome: 'premio', rotulo: 'Prêmio do fim de semana', tipo: 'texto', valor: m.premio,
+          dica: 'Ex.: Escolher o passeio de sábado, noite de jogos, café da manhã especial' },
+        { nome: 'icone', rotulo: 'Ícone', tipo: 'emoji', valor: m.icone || '🏆', opcoes: EMOJIS_PREMIO },
+        { nome: 'tipo', rotulo: 'Tipo de meta', tipo: 'select', valor: m.tipo, opcoes: [
+          { v: 'perfeitos', t: 'Dias perfeitos na semana' },
+          { v: 'tarefas', t: 'Total de tarefas na semana' },
+          { v: 'tarefa', t: 'Uma tarefa específica, N vezes' }
+        ] },
+        { nome: 'alvo', rotulo: 'Meta (quantidade)', tipo: 'numero', valor: m.alvo },
+        { nome: 'tarefaId', rotulo: 'Qual tarefa (só pro tipo "específica")', tipo: 'select', valor: m.tarefaId,
+          opcoes: [{ v: '', t: '—' }].concat(tarefasKid.map(t => ({ v: t.id, t: t.icone + ' ' + t.titulo }))) }
+      ],
+      aoSalvar: d => {
+        if (d.ativa && !d.premio) { toast('Diga qual é o prêmio', 'erro'); return false; }
+        if (d.ativa && d.tipo === 'tarefa' && !d.tarefaId) { toast('Escolha a tarefa da meta', 'erro'); return false; }
+        d.alvo = Math.max(1, d.alvo);
+        S.missoes[kid.id] = Object.assign({ semanaGanha: m.semanaGanha || '' }, d);
+        salvar(); telaAdmin();
+      }
+    });
   });
 
   $('[data-bau]').onclick = () => {

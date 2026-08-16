@@ -99,7 +99,26 @@ function festasPendentes(kid) {
     kid.nivelVisto = nivel; salvar();
     return setTimeout(() => festaDeNivel(kid), 350);
   }
+  const pm = progressoMissao(kid);
+  if (pm && pm.fimDeSemana && pm.batida && pm.m.semanaGanha !== semanaAtual()) {
+    pm.m.semanaGanha = semanaAtual(); salvar();
+    return setTimeout(() => festaDeMissao(kid, pm.m), 350);
+  }
   if (kid.bauPendente) setTimeout(() => modalBau(kid), 350);
+}
+
+function festaDeMissao(kid, m) {
+  confete(120); som('nivel');
+  modal({
+    classe: 'brinde',
+    corpo: '<div class="brinde"><div class="grande">🏆</div>' +
+      '<h3 style="margin-top:10px">Missão cumprida!</h3>' +
+      '<p class="sub">Você bateu a meta da semana, ' + esc(kid.nome) + '!</p>' +
+      '<div style="margin-top:16px;background:var(--accent-soft);border-radius:16px;padding:14px">' +
+        '<b>Desbloqueado pro fim de semana:</b><br><span style="font-size:22px">' + m.icone + '</span> ' + esc(m.premio) +
+      '</div><p class="sub" style="margin-top:12px">Combine com os pais quando vai ser!</p></div>',
+    botoes: [{ texto: 'Uhuul!', acao: () => { fecharModal(); telaKid(); } }]
+  });
 }
 
 /* O baú aparece fechado, balançando — o prêmio só é sorteado/creditado ao abrir */
@@ -150,6 +169,7 @@ function abaHoje(kid) {
     '</div><div class="barra"><i style="width:' + pct + '%"></i></div></div></div>';
 
   if (!kid.simples) html += cardDesafio(kid);   // escolher desafio exige ler; no modo pequeno atrapalha
+  html += cardMissao(kid);
 
   PERIODOS.forEach(p => {
     const doPeriodo = lista.filter(t => (t.periodo || 'qualquer') === p.id);
@@ -205,6 +225,37 @@ function cardDesafio(kid) {
       '<small>🪙 ' + v.moedas + ' · ⭐ ' + v.xp + ' XP · ' +
       (f ? (f.status === 'pendente' ? 'esperando o OK ⏳' : 'conquistado! ✅') : 'toque quando conseguir') + '</small></span></button></div>' +
   '</div></div>';
+}
+
+function cardMissao(kid) {
+  const p = progressoMissao(kid);
+  if (!p) return '';
+  const m = p.m;
+  const oQue =
+    m.tipo === 'perfeitos' ? 'dias perfeitos' :
+    m.tipo === 'tarefa' ? '× ' + esc((tarefaPorId(m.tarefaId) || { titulo: 'tarefa' }).titulo) :
+    'tarefas na semana';
+
+  if (p.fimDeSemana && p.batida) {
+    return '<div class="sec"><div class="meta-card" style="border:2px solid #f7b731;background:#fffaf0">' +
+      '<div class="cabeca"><div class="ic">🏆</div><div style="flex:1">' +
+      '<b>Missão cumprida! ' + m.icone + ' ' + esc(m.premio) + '</b>' +
+      '<small style="display:block">Desbloqueado pra este fim de semana — combine com os pais!</small>' +
+      '</div></div></div></div>';
+  }
+  if (p.fimDeSemana && !p.batida) {
+    return '<div class="sec"><div class="meta-card">' +
+      '<div class="cabeca"><div class="ic">🏆</div><div style="flex:1">' +
+      '<b>Missão de fim de semana</b>' +
+      '<small style="display:block">Faltou pouco: ' + p.atual + ' de ' + p.alvo + ' ' + oQue + '. Semana que vem tem de novo!</small>' +
+      '</div></div></div></div>';
+  }
+  return '<div class="sec"><div class="meta-card">' +
+    '<div class="cabeca"><div class="ic">' + m.icone + '</div><div style="flex:1">' +
+    '<b>Missão da semana: ' + esc(m.premio) + '</b>' +
+    '<small style="display:block">' + p.atual + ' de ' + p.alvo + ' ' + oQue + ' → prêmio no fim de semana</small>' +
+    '</div><div style="font-size:22px;font-weight:800;color:var(--accent)">' + p.atual + '/' + p.alvo + '</div></div>' +
+    '<div class="barra"><i style="width:' + Math.max(7, p.pct) + '%"></i></div></div></div>';
 }
 
 function cardMetaFamilia() {
