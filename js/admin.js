@@ -336,7 +336,7 @@ function eventosAjustes() {
     const p2 = (S.cfg.cofrinho.planos || [])[1] || { dias: 7, pct: 25 };
     formulario({
       titulo: '🐷 Cofrinho (investimento)',
-      sub: 'A criança guarda moedas por um prazo e recebe mais de volta. Se quebrar antes, recebe só o que guardou — nunca perde. Não aparece no modo pequeno.',
+      sub: 'A criança guarda moedas por um prazo e recebe mais de volta. Se quebrar antes, recebe só o que guardou — nunca perde.',
       campos: [
         { nome: 'ativo', rotulo: 'Mostrar para as crianças', tipo: 'check', valor: S.cfg.cofrinho.ativo },
         { nome: 'dias1', rotulo: 'Plano curto: dias', tipo: 'numero', valor: p1.dias },

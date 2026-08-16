@@ -264,8 +264,7 @@ function abaLoja(kid) {
         '<button class="btn pequeno claro" data-devolver="' + r.id + '">↩️ Devolver</button></div>').join('') + '</div></div>';
   }
 
-  // cofrinho pede leitura e noção de tempo; no modo pequeno atrapalha
-  if (!kid.simples && S.cfg.cofrinho && S.cfg.cofrinho.ativo) html += cardCofrinho(kid);
+  if (S.cfg.cofrinho && S.cfg.cofrinho.ativo) html += cardCofrinho(kid);
 
   const faixas = [
     { nome: '💚 Dá pra hoje', filtro: r => r.custo <= 30 },
