@@ -72,9 +72,8 @@ function eventosAprovar() {
   $$('[data-estornar]').forEach(b => b.onclick = () => {
     const r = S.resgates.find(x => x.id === b.dataset.estornar), k = kidPorId(r.kidId);
     confirmar('Devolver as moedas?', 'O prêmio "' + r.titulo + '" sai da fila e ' + (k ? k.nome : '') + ' recebe ' + r.custo + ' moedas de volta.', () => {
-      creditar(k, r.custo, 0, '↩️ Estorno: ' + r.titulo);
-      S.resgates = S.resgates.filter(x => x.id !== r.id);
-      salvar(); telaAdmin();
+      desfazerCompra(r.kidId, r.id);
+      telaAdmin();
     });
   });
 }
@@ -279,6 +278,11 @@ function painelAjustes() {
     '<div class="acoes"><button class="btn pequeno claro" data-regras="1">Editar</button></div></div>' +
     '<div class="linha-item"><div class="ic">⭐</div><div class="corpo"><b>Bônus de dia perfeito</b>' +
     '<small>🪙 ' + S.cfg.bonusDiaPerfeito + ' + ofensiva · ⭐ ' + S.cfg.xpDiaPerfeito + ' XP</small></div></div>' +
+    '<div class="linha-item"><div class="ic">🐷</div><div class="corpo"><b>Cofrinho (investimento)</b>' +
+    '<small>' + (S.cfg.cofrinho.ativo
+      ? (S.cfg.cofrinho.planos || []).map(p => p.dias + ' dias: +' + p.pct + '%').join(' · ') + ' · quebrar antes devolve só o guardado'
+      : 'desligado') + '</small></div>' +
+    '<div class="acoes"><button class="btn pequeno claro" data-cofrinho="1">Editar</button></div></div>' +
     '<div class="linha-item"><div class="ic">🔊</div><div class="corpo"><b>Sons</b><small>' + (S.cfg.somLigado ? 'ligados' : 'desligados') + '</small></div>' +
     '<div class="acoes"><button class="btn pequeno claro" data-som="1">' + (S.cfg.somLigado ? 'Desligar' : 'Ligar') + '</button></div></div></div>' +
 
@@ -326,6 +330,32 @@ function eventosAjustes() {
       salvar(); telaAdmin();
     }
   });
+
+  $('[data-cofrinho]').onclick = () => {
+    const p1 = (S.cfg.cofrinho.planos || [])[0] || { dias: 3, pct: 10 };
+    const p2 = (S.cfg.cofrinho.planos || [])[1] || { dias: 7, pct: 25 };
+    formulario({
+      titulo: '🐷 Cofrinho (investimento)',
+      sub: 'A criança guarda moedas por um prazo e recebe mais de volta. Se quebrar antes, recebe só o que guardou — nunca perde. Não aparece no modo pequeno.',
+      campos: [
+        { nome: 'ativo', rotulo: 'Mostrar para as crianças', tipo: 'check', valor: S.cfg.cofrinho.ativo },
+        { nome: 'dias1', rotulo: 'Plano curto: dias', tipo: 'numero', valor: p1.dias },
+        { nome: 'pct1', rotulo: 'Plano curto: rendimento (%)', tipo: 'numero', valor: p1.pct },
+        { nome: 'dias2', rotulo: 'Plano longo: dias', tipo: 'numero', valor: p2.dias },
+        { nome: 'pct2', rotulo: 'Plano longo: rendimento (%)', tipo: 'numero', valor: p2.pct }
+      ],
+      aoSalvar: d => {
+        S.cfg.cofrinho = {
+          ativo: d.ativo,
+          planos: [
+            { dias: Math.max(1, d.dias1), pct: Math.max(1, d.pct1) },
+            { dias: Math.max(1, d.dias2), pct: Math.max(1, d.pct2) }
+          ]
+        };
+        salvar(); telaAdmin();
+      }
+    });
+  };
 
   $('[data-som]').onclick = () => { S.cfg.somLigado = !S.cfg.somLigado; salvar(); telaAdmin(); };
 

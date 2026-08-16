@@ -260,8 +260,12 @@ function abaLoja(kid) {
   if (espera.length) {
     html += '<div class="sec"><h2>⏳ Já é seu, esperando pra usar</h2><div class="extrato">' +
       espera.map(r => '<div class="item"><span style="font-size:22px">' + r.icone + '</span><b>' + esc(r.titulo) + '</b>' +
-        '<span class="quando">' + quando(r.ts) + '</span></div>').join('') + '</div></div>';
+        '<span class="quando">' + quando(r.ts) + '</span>' +
+        '<button class="btn pequeno claro" data-devolver="' + r.id + '">↩️ Devolver</button></div>').join('') + '</div></div>';
   }
+
+  // cofrinho pede leitura e noção de tempo; no modo pequeno atrapalha
+  if (!kid.simples && S.cfg.cofrinho && S.cfg.cofrinho.ativo) html += cardCofrinho(kid);
 
   const faixas = [
     { nome: '💚 Dá pra hoje', filtro: r => r.custo <= 30 },
@@ -287,7 +291,125 @@ function abaLoja(kid) {
   return html;
 }
 
+function cardCofrinho(kid) {
+  const e = estadoCofrinho(kid);
+
+  if (!e) {
+    const planos = (S.cfg.cofrinho.planos || []).filter(p => p.dias > 0 && p.pct > 0);
+    if (!planos.length) return '';
+    return '<div class="sec"><div class="desafio-card">' +
+      '<h3>🐷 Cofrinho</h3>' +
+      '<p>Guarde moedas por uns dias e elas <b>rendem</b>: você recebe mais do que guardou!</p>' +
+      '<div class="desafio-opcoes">' + planos.map((p, i) =>
+        '<button class="desafio-op" data-plano="' + i + '"><span class="ic">' + (i === 0 ? '⏳' : '🏦') + '</span>' +
+        '<span><b>' + p.dias + ' dias · rende +' + p.pct + '%</b>' +
+        '<small>por exemplo: 20 moedas viram ' + (20 + rendimentoDe(20, p.pct)) + '</small></span></button>'
+      ).join('') + '</div></div></div>';
+  }
+
+  if (e.pronto) {
+    return '<div class="sec"><div class="desafio-card">' +
+      '<h3>🐷 Cofrinho pronto!</h3>' +
+      '<p>Suas ' + e.moedas + ' moedas renderam <b>+' + e.rendimento + '</b>. Pode abrir!</p>' +
+      '<button class="btn ok bloco" data-abrir-cofrinho="1" style="margin-top:12px">Abrir e pegar ' + e.total + ' 🪙</button>' +
+    '</div></div>';
+  }
+
+  const pctBarra = Math.max(7, (e.passados / e.dias) * 100);
+  return '<div class="sec"><div class="desafio-card">' +
+    '<h3>🐷 Seu cofrinho</h3>' +
+    '<p><b>' + e.moedas + ' moedas</b> guardadas, rendendo… ' +
+      (e.faltam === 1 ? 'Amanhã elas viram' : 'Em ' + e.faltam + ' dias elas viram') + ' <b>' + e.total + '</b>!</p>' +
+    '<div class="barra" style="margin-top:12px"><i style="width:' + pctBarra + '%"></i></div>' +
+    '<small style="display:block;margin-top:6px;color:#c9c8ee">Dia ' + e.passados + ' de ' + e.dias + '</small>' +
+    '<button class="btn pequeno claro" data-quebrar-cofrinho="1" style="margin-top:12px">🔨 Quebrar antes da hora</button>' +
+  '</div></div>';
+}
+
+function modalGuardar(kid, plano) {
+  const m = modal({
+    titulo: '🐷 Guardar por ' + plano.dias + ' dias',
+    sub: 'Rende +' + plano.pct + '%. Você tem ' + kid.moedas + ' moedas.',
+    corpo: '<label class="campo">Quantas moedas guardar?' +
+      '<input id="c_guardar" type="number" min="1" max="' + kid.moedas + '" value="' + Math.min(kid.moedas, 20) + '"></label>' +
+      '<p id="c_preview" style="margin-top:10px;font-weight:700"></p>',
+    botoes: [
+      { texto: 'Agora não', classe: 'claro', acao: fecharModal },
+      { texto: 'Guardar!', classe: 'ok', acao: () => {
+          const v = Math.floor(Number($('#c_guardar', m).value) || 0);
+          if (v < 1 || v > kid.moedas) { som('erro'); return toast('Escolha entre 1 e ' + kid.moedas + ' moedas', 'erro'); }
+          fecharModal();
+          if (abrirCofrinho(kid.id, v, plano.dias, plano.pct)) { som('compra'); toast('Guardado! Agora é deixar render 🐷'); telaKid(); }
+        } }
+    ]
+  });
+  const inp = $('#c_guardar', m), prev = $('#c_preview', m);
+  const atualizar = () => {
+    const v = Math.floor(Number(inp.value) || 0);
+    prev.textContent = (v >= 1 && v <= kid.moedas)
+      ? v + ' 🪙 viram ' + (v + rendimentoDe(v, plano.pct)) + ' 🪙 em ' + plano.dias + ' dias'
+      : 'Escolha entre 1 e ' + kid.moedas;
+  };
+  inp.oninput = atualizar; atualizar();
+}
+
 function ligarEventosLoja(kid) {
+  $$('[data-plano]').forEach(b => b.onclick = () => {
+    const p = (S.cfg.cofrinho.planos || [])[Number(b.dataset.plano)];
+    if (!p) return;
+    if (kid.moedas < 1) { som('erro'); return toast('Junte moedas primeiro pra poder guardar', 'erro'); }
+    modalGuardar(kid, p);
+  });
+
+  const abrir = $('[data-abrir-cofrinho]');
+  if (abrir) abrir.onclick = () => {
+    const e = resgatarCofrinho(kid.id);
+    if (!e) return;
+    som('nivel'); confete(90);
+    modal({
+      classe: 'brinde',
+      corpo: '<div class="brinde"><div class="grande">🐷</div>' +
+        '<h3 style="margin-top:10px">Rendeu!</h3>' +
+        '<p class="sub">Você guardou ' + e.moedas + ' moedas e recebeu <b>' + e.total + '</b>. São +' + e.rendimento + ' de rendimento por saber esperar!</p></div>',
+      botoes: [{ texto: 'Uhuul!', acao: () => { fecharModal(); telaKid(); } }]
+    });
+  };
+
+  const quebrar = $('[data-quebrar-cofrinho]');
+  if (quebrar) quebrar.onclick = () => {
+    const e = estadoCofrinho(kid);
+    if (!e || e.pronto) return;
+    modal({
+      titulo: '🔨 Quebrar o cofrinho?',
+      sub: 'Você recebe as ' + e.moedas + ' moedas que guardou, mas perde o rendimento de +' + e.rendimento + '. ' +
+        (e.faltam === 1 ? 'Falta só 1 dia!' : 'Faltam ' + e.faltam + ' dias.'),
+      botoes: [
+        { texto: 'Vou esperar', classe: 'claro', acao: fecharModal },
+        { texto: 'Quebrar', classe: 'perigo', acao: () => {
+            fecharModal();
+            if (quebrarCofrinho(kid.id)) { som('compra'); toast('Cofrinho quebrado: +' + e.moedas + ' 🪙 de volta'); telaKid(); }
+          } }
+      ]
+    });
+  };
+
+  $$('[data-devolver]').forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    const r = S.resgates.find(x => x.id === b.dataset.devolver);
+    if (!r || r.status !== 'pendente') return;
+    modal({
+      titulo: '↩️ Devolver este prêmio?',
+      sub: '"' + esc(r.titulo) + '" volta pra loja e você recebe as ' + r.custo + ' moedas de volta.',
+      botoes: [
+        { texto: 'Quero ficar com ele', classe: 'claro', acao: fecharModal },
+        { texto: 'Devolver', classe: 'ok', acao: () => {
+            fecharModal();
+            if (desfazerCompra(kid.id, r.id)) { som('moeda'); toast('Devolvido! +' + r.custo + ' moedas de volta 🪙'); telaKid(); }
+          } }
+      ]
+    });
+  });
+
   $$('[data-premio]').forEach(b => b.onclick = () => {
     const r = recompensaPorId(b.dataset.premio);
     const nivel = nivelPorXp(kid.xp);
@@ -325,6 +447,7 @@ function abaEu(kid) {
       caixinha('🏅', kid.streak.melhor, 'melhor sequência') +
       caixinha('🛡️', kid.streak.escudos, 'escudo da semana') +
       caixinha('🪙', kid.totalMoedas, 'moedas ganhas') +
+      (kid.cofrinho ? caixinha('🐷', kid.cofrinho.moedas, 'no cofrinho') : '') +
     '</div></div></div>';
 
   html += '<div class="sec"><h2>🏆 Conquistas<span class="conta">' + kid.conquistas.length + '/' + CONQUISTAS.length + '</span></h2><div class="medalhas">' +

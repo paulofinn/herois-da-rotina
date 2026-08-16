@@ -50,7 +50,8 @@ function estadoInicial() {
       chanceBau: 0.35,          // reforço variável: chance de baú ao fechar o dia
       bonusDiaPerfeito: 5,
       xpDiaPerfeito: 10,
-      somLigado: true
+      somLigado: true,
+      cofrinho: { ativo: true, planos: [{ dias: 3, pct: 10 }, { dias: 7, pct: 25 }] }
     },
     meta: { titulo: 'Noite de pizza e cinema em casa', alvo: 60, ativa: true, ultimaSemanaGanha: '' },
     kids: [],
@@ -66,6 +67,7 @@ function novoKid(nome, icone, cor, simples) {
   return {
     id: uid(), nome, icone, cor, simples: !!simples,
     moedas: 0, xp: 0, totalMoedas: 0,
+    cofrinho: null, cofrinhosCompletos: 0,
     streak: { n: 0, melhor: 0, ultimoDia: '', escudos: 1, semanaEscudo: semanaAtual() },
     desafio: { semana: '', tarefaId: '' },
     conquistas: [], nivelVisto: 1, ultimaFesta: null
@@ -94,6 +96,8 @@ function carregar() {
     if (!k.conquistas) k.conquistas = [];
     if (!k.nivelVisto) k.nivelVisto = nivelPorXp(k.xp);
     if (k.ultimaFesta === undefined) k.ultimaFesta = null;
+    if (k.cofrinho === undefined) k.cofrinho = null;
+    if (!k.cofrinhosCompletos) k.cofrinhosCompletos = 0;
     recarregarEscudo(k);
   });
   return S;
@@ -330,8 +334,73 @@ function comprar(kidId, recompensaId) {
   return { ok: true };
 }
 
+// Desfaz uma compra ainda não entregue: devolve as moedas e tira o prêmio da fila.
+// Não usa creditar() de propósito — devolução não conta como "moedas ganhas" (totalMoedas).
+function desfazerCompra(kidId, resgateId) {
+  const r = S.resgates.find(x => x.id === resgateId);
+  if (!r || r.kidId !== kidId || r.status !== 'pendente') return false;
+  const kid = kidPorId(kidId);
+  if (!kid) return false;
+  kid.moedas += r.custo;
+  S.extrato.push({ id: uid(), kidId, ts: Date.now(), moedas: r.custo, xp: 0, texto: '↩️ Devolvido: ' + r.titulo });
+  S.resgates = S.resgates.filter(x => x.id !== r.id);
+  salvar();
+  return true;
+}
+
 function resgatesDoKid(kidId, status) {
   return S.resgates.filter(x => x.kidId === kidId && (!status || x.status === status)).sort((a, b) => b.ts - a.ts);
+}
+
+/* ---------- cofrinho (investimento) ----------
+   A criança guarda moedas por um prazo e recebe mais de volta.
+   Quebrar antes da hora devolve só o principal — ela nunca perde moedas. */
+function rendimentoDe(moedas, pct) { return Math.max(1, Math.ceil(moedas * pct / 100)); }
+
+function estadoCofrinho(kid) {
+  const c = kid.cofrinho;
+  if (!c) return null;
+  const passados = Math.max(0, diffDias(c.inicio, hojeISO()));
+  const rendimento = rendimentoDe(c.moedas, c.pct);
+  return {
+    moedas: c.moedas, dias: c.dias, pct: c.pct, inicio: c.inicio,
+    passados: Math.min(passados, c.dias), faltam: Math.max(0, c.dias - passados),
+    pronto: passados >= c.dias, rendimento, total: c.moedas + rendimento
+  };
+}
+
+function abrirCofrinho(kidId, moedas, dias, pct) {
+  const kid = kidPorId(kidId);
+  moedas = Math.floor(Number(moedas) || 0);
+  if (!kid || kid.cofrinho || moedas < 1 || kid.moedas < moedas) return false;
+  kid.moedas -= moedas;
+  kid.cofrinho = { moedas, dias, pct, inicio: hojeISO(), ts: Date.now() };
+  S.extrato.push({ id: uid(), kidId, ts: Date.now(), moedas: -moedas, xp: 0, texto: '🐷 Guardou no cofrinho (' + dias + ' dias)' });
+  salvar();
+  return true;
+}
+
+function resgatarCofrinho(kidId) {
+  const kid = kidPorId(kidId), e = kid && estadoCofrinho(kid);
+  if (!e || !e.pronto) return null;
+  kid.moedas += e.total;
+  kid.totalMoedas += e.rendimento;          // só o rendimento é moeda "nova"; o principal já contou quando foi ganho
+  kid.cofrinhosCompletos += 1;
+  S.extrato.push({ id: uid(), kidId, ts: Date.now(), moedas: e.total, xp: 0, texto: '🐷 Cofrinho rendeu +' + e.rendimento + '!' });
+  kid.cofrinho = null;
+  novasConquistas(kid);
+  salvar();
+  return e;
+}
+
+function quebrarCofrinho(kidId) {
+  const kid = kidPorId(kidId), e = kid && estadoCofrinho(kid);
+  if (!e || e.pronto) return null;          // se já está pronto, o caminho é resgatar
+  kid.moedas += e.moedas;
+  S.extrato.push({ id: uid(), kidId, ts: Date.now(), moedas: e.moedas, xp: 0, texto: '🐷 Quebrou o cofrinho antes da hora' });
+  kid.cofrinho = null;
+  salvar();
+  return e;
 }
 
 /* ---------- meta cooperativa da família ---------- */
@@ -351,7 +420,8 @@ const CONQUISTAS = [
   { id: 'nivel10', icone: '🏆', nome: 'Nível 10', desc: 'Chegou ao nível 10', teste: k => nivelPorXp(k.xp) >= 10 },
   { id: 'compra1', icone: '🛒', nome: 'Primeira troca', desc: 'Trocou moedas por um prêmio', teste: k => S.resgates.some(r => r.kidId === k.id) },
   { id: 'cem', icone: '💯', nome: 'Cem tarefas', desc: 'Concluiu 100 tarefas', teste: k => contaFeitos(k.id) >= 100 },
-  { id: 'rico', icone: '💎', nome: 'Poupador', desc: 'Juntou 300 moedas de uma vez', teste: k => k.moedas >= 300 }
+  { id: 'rico', icone: '💎', nome: 'Poupador', desc: 'Juntou 300 moedas de uma vez', teste: k => k.moedas >= 300 },
+  { id: 'investidor', icone: '🐷', nome: 'Investidor', desc: 'Deixou o cofrinho render até o fim', teste: k => (k.cofrinhosCompletos || 0) >= 1 }
 ];
 function contaFeitos(kidId) { return S.feitos.filter(f => f.kidId === kidId && f.status === 'aprovada').length; }
 function novasConquistas(kid) {
